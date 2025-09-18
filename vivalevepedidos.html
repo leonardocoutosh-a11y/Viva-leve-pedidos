@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Pedido — Saladeria</title>
+<style>
+  :root{
+    --bg:#f4f7f6;
+    --card:#fff;
+    --accent:#2b9348;
+    --muted:#6b7280;
+    --danger:#e63946;
+    --glass: rgba(255,255,255,0.85);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  body{margin:0;background:linear-gradient(180deg,var(--bg),#eef6ee);color:#0b1220;-webkit-font-smoothing:antialiased;}
+  .app{max-width:920px;margin:0 auto;padding:16px;}
+  header{display:flex;gap:12px;align-items:center;margin-bottom:8px}
+  .brand{background:var(--accent);color:white;width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;box-shadow:0 6px 18px rgba(43,147,72,0.14)}
+  h1{font-size:18px;margin:0}
+  p.lead{margin:0;color:var(--muted);font-size:13px}
+  .card{background:var(--card);padding:12px;border-radius:12px;box-shadow:0 6px 18px rgba(10,20,30,0.04);margin:12px 0}
+  label{display:block;margin-bottom:6px;font-weight:600}
+  input[type=text], input[type=tel], textarea, select {width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef0;font-size:14px;box-sizing:border-box}
+  .row{display:flex;gap:8px}
+  .col{flex:1}
+  .small{width:120px}
+  .group{margin-top:10px}
+  .opts{display:flex;flex-wrap:wrap;gap:8px}
+  .opt{padding:8px 10px;border-radius:8px;border:1px solid #e6eef0;background:#fbfdfb;cursor:pointer;user-select:none}
+  .opt.selected{border-color:var(--accent);box-shadow:0 6px 18px rgba(43,147,72,0.08);background:linear-gradient(180deg,#fff,#f1fff1)}
+  .note{font-size:13px;color:var(--muted);margin-top:6px}
+  .error{color:var(--danger);font-weight:700;margin-top:8px}
+  .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  button{background:var(--accent);color:white;padding:12px 14px;border-radius:10px;border:0;font-weight:700;font-size:15px}
+  button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(43,147,72,0.12)}
+  footer{position:fixed;left:0;right:0;bottom:0;padding:12px;backdrop-filter: blur(6px);background: linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.95));display:flex;justify-content:center;box-shadow:0 -6px 18px rgba(2,6,23,0.04)}
+  .whatsapp-btn{width:100%;max-width:920px;display:flex;gap:10px;align-items:center}
+  .total{font-weight:800;font-size:18px}
+  @media(min-width:720px){ .row{gap:12px} .small{width:180px} }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">VIVA LEVE</div>
+      <div>
+        <h1>Montar Salada — Viva Leve</h1>
+        <p class="lead">Preencha os dados, escolha opções e envie para o WhatsApp da cozinha.</p>
+      </div>
+    </header>
+
+    <!-- CONFIGURAÇÃO -->
+    <script>const WHATSAPP_NUMBER = "5522998476294"; const PIX_KEY = "22998476294";</script>
+
+    <!-- Cadastro do cliente -->
+    <div class="card">
+      <strong>Dados do cliente</strong>
+      <div class="group">
+        <label for="clienteNome">Nome</label>
+        <input id="clienteNome" type="text" placeholder="Nome completo" />
+      </div>
+      <div class="group row">
+        <div class="col">
+          <label for="clienteTel">Telefone</label>
+          <input id="clienteTel" type="tel" placeholder="(22) 9xxxx-xxxx" />
+        </div>
+        <div class="small">
+          <label for="clienteCep">CEP (opcional)</label>
+          <input id="clienteCep" type="text" placeholder="XXXXX-XXX" />
+        </div>
+      </div>
+      <div class="group">
+        <label for="clienteEndereco">Endereço (rua, número, complemento, bairro)</label>
+        <textarea id="clienteEndereco" rows="2" placeholder="Ex: Rua A, 123 - Centro"></textarea>
+      </div>
+    </div>
+
+    <!-- Tamanho -->
+    <div class="card">
+      <strong>Tamanho</strong>
+      <div class="note">Escolha o tamanho da salada</div>
+      <div id="tamanhos" class="opts group">
+        <label class="opt" data-type="size" data-value="P" data-price="16">P (R$16,00)</label>
+        <label class="opt" data-type="size" data-value="M" data-price="22">M (R$22,00)</label>
+      </div>
+    </div>
+
+    <!-- Ingredientes por grupos com regras -->
+    <div class="card" id="ingredientesCard">
+      <strong>Ingredientes</strong>
+
+      <!-- Proteína (escolha 1) -->
+      <div class="group">
+        <label>Proteína (escolha 1)</label>
+        <div id="proteinas" class="opts">
+          <label class="opt" data-group="proteina" data-value="Frango desfiado">Frango desfiado</label>
+          <label class="opt" data-group="proteina" data-value="Ovo de codorna">Ovo de codorna</label>
+        </div>
+        <div class="note">Selecione apenas 1 proteína.</div>
+      </div>
+
+      <!-- Complementos (escolha até 6) -->
+      <div class="group">
+        <label>Complementos (até 6)</label>
+        <div id="complementos" class="opts">
+          <label class="opt" data-group="complemento" data-value="Cebola roxa">Cebola roxa</label>
+          <label class="opt" data-group="complemento" data-value="Cenoura ralada">Cenoura ralada</label>
+          <label class="opt" data-group="complemento" data-value="Alho poró">Alho poró</label>
+          <label class="opt" data-group="complemento" data-value="Croutons">Croutons</label>
+          <label class="opt" data-group="complemento" data-value="Tomate">Tomate</label>
+          <label class="opt" data-group="complemento" data-value="Pepino">Pepino</label>
+          <label class="opt" data-group="complemento" data-value="Batata palha">Batata palha</label>
+          <label class="opt" data-group="complemento" data-value="Repolho roxo">Repolho roxo</label>
+          <label class="opt" data-group="complemento" data-value="Ervilha in natura">Ervilha in natura</label>
+          <label class="opt" data-group="complemento" data-value="Brócolis">Brócolis</label>
+          <label class="opt" data-group="complemento" data-value="Milho verde">Milho verde</label>
+        </div>
+        <div class="note">Máximo 6 complementos diferentes.</div>
+      </div>
+
+      <!-- Frutas (escolha 1) -->
+      <div class="group">
+        <label>Frutas (escolha 1)</label>
+        <div id="frutas" class="opts">
+          <label class="opt" data-group="fruta" data-value="Manga">Manga</label>
+          <label class="opt" data-group="fruta" data-value="Morango">Morango</label>
+          <label class="opt" data-group="fruta" data-value="Uva passa">Uva passa</label>
+        </div>
+        <div class="note">Selecione apenas 1 fruta.</div>
+      </div>
+
+      <!-- Folhas (escolha 2) -->
+      <div class="group">
+        <label>Folhas (escolha 2)</label>
+        <div id="folhas" class="opts">
+          <label class="opt" data-group="folha" data-value="Rúcula">Rúcula</label>
+          <label class="opt" data-group="folha" data-value="Alface crespa">Alface crespa</label>
+          <label class="opt" data-group="folha" data-value="Alface americana">Alface americana</label>
+        </div>
+        <div class="note">Escolha exatamente 2 folhas.</div>
+      </div>
+
+      <!-- Carboidrato (escolha 1) -->
+      <div class="group">
+        <label>Carboidrato (escolha 1)</label>
+        <div id="carbo" class="opts">
+          <label class="opt" data-group="carbo" data-value="Macarrão parafuso">Macarrão parafuso</label>
+          <label class="opt" data-group="carbo" data-value="Macarrão sem glúten">Macarrão sem glúten</label>
+          <label class="opt" data-group="carbo" data-value="Quinoa">Quinoa</label>
+        </div>
+        <div class="note">Selecione 1 carboidrato.</div>
+      </div>
+
+      <!-- Molho (escolha 1) -->
+      <div class="group">
+        <label>Molho (escolha 1)</label>
+        <div id="molhos" class="opts">
+          <label class="opt" data-group="molho" data-value="Molho rose">Molho rose</label>
+          <label class="opt" data-group="molho" data-value="Molho mostarda e mel">Molho mostarda e mel</label>
+          <label class="opt" data-group="molho" data-value="Molho iogurte natural com ervas finas">Molho iogurte natural com ervas finas</label>
+        </div>
+      </div>
+
+      <!-- Disposição do molho (escolha 1) -->
+      <div class="group">
+        <label>Disposição do molho</label>
+        <div id="dispMolho" class="opts">
+          <label class="opt" data-group="disp" data-value="Separado">Separado</label>
+          <label class="opt" data-group="disp" data-value="Na salada">Na salada</label>
+        </div>
+      </div>
+
+      <div id="ingError" class="error" style="display:none"></div>
+    </div>
+
+    <!-- Observações -->
+    <div class="card">
+      <label for="obs">Observações</label>
+      <textarea id="obs" rows="3" placeholder="Ex: Sem cebola, sem sal."></textarea>
+    </div>
+
+    <!-- Entrega e Pagamento -->
+    <div class="card">
+      <strong>Entrega</strong>
+      <div class="group">
+        <div class="opts" id="entregaOpts">
+          <label class="opt" data-delivery="retirar">Retirar no local</label>
+          <label class="opt" data-delivery="centro">Delivery - Centro (soma R$4,00)</label>
+          <label class="opt" data-delivery="outro">Delivery - Outro (consultar valor)</label>
+        </div>
+        <div class="note">Se escolher "Outro", a cozinha receberá o endereço e terá que confirmar o valor do delivery.</div>
+      </div>
+
+      <strong style="margin-top:10px;display:block">Forma de pagamento</strong>
+      <div id="pagamento" class="group">
+        <div class="opts">
+          <label class="opt" data-pay="dinheiro">Dinheiro (precisa de troco)</label>
+          <label class="opt" data-pay="cartao">Cartão</label>
+          <label class="opt" data-pay="pix">PIX (chave: <strong id="pixKeyUI">22998476294</strong>)</label>
+        </div>
+        <div id="trocoRow" style="display:none;margin-top:8px">
+          <label for="trocoPara">Troco para (R$)</label>
+          <input id="trocoPara" type="text" placeholder="Ex: 50,00" />
+        </div>
+      </div>
+
+      <div class="group" style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
+        <div class="note">Total estimado</div>
+        <div class="total" id="totalUI">R$0,00</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <button id="previewBtn" class="ghost">Visualizar pedido</button>
+        <button id="sendBtn">Enviar para WhatsApp</button>
+      </div>
+      <div class="note" style="margin-top:8px">Ao enviar, o WhatsApp abrirá com a mensagem pronta para o número da cozinha.</div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="whatsapp-btn">
+      <button id="sendFooterBtn" style="flex:1">Enviar pedido → WhatsApp</button>
+    </div>
+  </footer>
+
+<script>
+/* --- Dados / estado --- */
+const WHATSAPP = (typeof WHATSAPP_NUMBER !== 'undefined') ? WHATSAPP_NUMBER : "5522998476294";
+const PIX = (typeof PIX_KEY !== 'undefined') ? PIX_KEY : "22998476294";
+
+document.getElementById('pixKeyUI').textContent = PIX;
+
+const state = {
+  size: null,
+  proteina: null,
+  complementos: new Set(),
+  fruta: null,
+  folhas: new Set(),
+  carbo: null,
+  molho: null,
+  dispMolho: null,
+  entrega: 'retirar',
+  pagamento: null,
+  trocoPara: null
+};
+
+const limits = {
+  proteina: 1,
+  complementos: 6,
+  fruta: 1,
+  folhas: 2,
+  carbo: 1,
+  molho: 1,
+  disp: 1
+};
+
+function moneyBR(value){
+  return "R$" + value.toFixed(2).replace(".", ",");
+}
+
+/* --- helpers para seleção UI --- */
+function toggleSingle(optsContainer, value, groupKey){
+  // deselect others and select this; value null to clear
+  const labels = optsContainer.querySelectorAll('.opt');
+  labels.forEach(l=>{
+    if (l.dataset.value === value) {
+      l.classList.add('selected');
+    } else {
+      l.classList.remove('selected');
+    }
+  });
+  // update state
+  if (groupKey === 'size') state.size = value;
+  else if (groupKey === 'proteina') state.proteina = value;
+  else if (groupKey === 'fruta') state.fruta = value;
+  else if (groupKey === 'carbo') state.carbo = value;
+  else if (groupKey === 'molho') state.molho = value;
+  else if (groupKey === 'disp') state.dispMolho = value;
+}
+
+function toggleSingleByData(optsContainer, dataAttr, groupKey){
+  optsContainer.querySelectorAll('.opt').forEach(l=>{
+    l.addEventListener('click', ()=>{
+      // read value from dataset (some use data-value, others data-delivery or data-pay)
+      const val = l.dataset.value || l.dataset.delivery || l.dataset.pay;
+      if (!val) return;
+      // deselect all in container
+      optsContainer.querySelectorAll('.opt').forEach(x=> x.classList.remove('selected'));
+      l.classList.add('selected');
+      // update state based on groupKey
+      if (groupKey === 'delivery') {
+        state.entrega = l.dataset.delivery;
+      } else if (groupKey === 'payment') {
+        state.pagamento = l.dataset.pay;
+      } else if (groupKey === 'size') {
+        state.size = l.dataset.value;
+      } else if (groupKey === 'proteina') {
+        state.proteina = l.dataset.value;
+      } else if (groupKey === 'fruta') {
+        state.fruta = l.dataset.value;
+      } else if (groupKey === 'carbo') {
+        state.carbo = l.dataset.value;
+      } else if (groupKey === 'molho') {
+        state.molho = l.dataset.value;
+      } else if (groupKey === 'disp') {
+        state.dispMolho = l.dataset.value;
+      }
+      refreshUI();
+    });
+  });
+}
+
+/* --- multi-select for complementos and folhas (with limits) --- */
+function attachMultiSelect(containerId, stateSet, limit, stateKey){
+  const container = document.getElementById(containerId);
+  container.querySelectorAll('.opt').forEach(label=>{
+    label.addEventListener('click', ()=>{
+      const val = label.dataset.value;
+      if (stateSet.has(val)){
+        stateSet.delete(val);
+        label.classList.remove('selected');
+      } else {
+        if (stateSet.size >= limit){
+          // visual feedback: flash
+          label.style.transform = "scale(0.98)";
+          setTimeout(()=> label.style.transform = "", 120);
+          alert(`Você só pode escolher até ${limit} item(s) neste grupo.`);
+          return;
+        }
+        stateSet.add(val);
+        label.classList.add('selected');
+      }
+      refreshUI();
+    });
+  });
+}
+
+/* --- Attach single-select groups --- */
+document.querySelectorAll('#tamanhos .opt').forEach(l=>{
+  l.addEventListener('click', ()=>{
+    document.querySelectorAll('#tamanhos .opt').forEach(x=>x.classList.remove('selected'));
+    l.classList.add('selected');
+    state.size = l.dataset.value;
+    state.sizePrice = parseFloat(l.dataset.price);
+    refreshUI();
+  });
+});
+
+// Proteínas single
+document.querySelectorAll('#proteinas .opt').forEach(l=>{
+  l.addEventListener('click', ()=>{
+    document.querySelectorAll('#proteinas .opt').forEach(x=>x.classList.remove('selected'));
+    l.classList.add('selected');
+    state.proteina = l.dataset.value;
+    refreshUI();
+  });
+});
+
+// Frutas, carbo, molhos, disp
+['#frutas','#carbo','#molhos','#dispMolho'].forEach(sel=>{
+  document.querySelectorAll(sel + ' .opt').forEach(l=>{
+    l.addEventListener('click', ()=>{
+      document.querySelectorAll(sel + ' .opt').forEach(x=>x.classList.remove('selected'));
+      l.classList.add('selected');
+      // map sel to state keys
+      if (sel === '#frutas') state.fruta = l.dataset.value;
+      if (sel === '#carbo') state.carbo = l.dataset.value;
+      if (sel === '#molhos') state.molho = l.dataset.value;
+      if (sel === '#dispMolho') state.dispMolho = l.dataset.value;
+      refreshUI();
+    });
+  });
+});
+
+// Complementos (multi up to 6)
+attachMultiSelect('complementos', state.complementos, limits.complementos, 'complementos');
+// Folhas (multi up to 2)
+attachMultiSelect('folhas', state.folhas, limits.folhas, 'folhas');
+
+// Entrega options
+document.querySelectorAll('#entregaOpts .opt').forEach(l=>{
+  l.addEventListener('click', ()=>{
+    document.querySelectorAll('#entregaOpts .opt').forEach(x=>x.classList.remove('selected'));
+    l.classList.add('selected');
+    state.entrega = l.dataset.delivery;
+    refreshUI();
+  });
+});
+// Pagamento options
+document.querySelectorAll('#pagamento .opt').forEach(l=>{
+  l.addEventListener('click', ()=>{
+    document.querySelectorAll('#pagamento .opt').forEach(x=>x.classList.remove('selected'));
+    l.classList.add('selected');
+    state.pagamento = l.dataset.pay;
+    // show troco if dinheiro
+    if (state.pagamento === 'dinheiro') {
+      document.getElementById('trocoRow').style.display = 'block';
+    } else {
+      document.getElementById('trocoRow').style.display = 'none';
+      document.getElementById('trocoPara').value = "";
+      state.trocoPara = null;
+    }
+    refreshUI();
+  });
+});
+
+// Troco input
+document.getElementById('trocoPara').addEventListener('input', (e)=>{
+  const raw = e.target.value.replace(",", ".").replace(/[^0-9.]/g,"");
+  state.trocoPara = raw ? parseFloat(raw) : null;
+  refreshUI();
+});
+
+/* --- Cálculo total --- */
+function calculateTotal(){
+  let total = 0;
+  if (state.size === 'P') total += 16;
+  if (state.size === 'M') total += 22;
+  // delivery centro +4
+  if (state.entrega === 'centro') total += 4;
+  // If delivery outro, we can't compute fee; leave as is and mark "Consultar"
+  return total;
+}
+
+/* --- validação das regras antes do envio --- */
+function validateAll(){
+  const errors = [];
+  // size
+  if (!state.size) errors.push("Escolha o tamanho (P ou M).");
+  // proteina
+  if (!state.proteina) errors.push("Escolha 1 proteína.");
+  // complementos count
+  if (state.complementos.size === 0) errors.push("Escolha pelo menos 1 complemento (máx 6).");
+  if (state.complementos.size > limits.complementos) errors.push(`Máximo ${limits.complementos} complementos.`);
+  // fruta
+  if (!state.fruta) errors.push("Escolha 1 fruta.");
+  // folhas exact 2
+  if (state.folhas.size !== limits.folhas) errors.push(`Escolha exatamente ${limits.folhas} folhas.`);
+  // carbo
+  if (!state.carbo) errors.push("Escolha 1 carboidrato.");
+  // molho
+  if (!state.molho) errors.push("Escolha 1 molho.");
+  // disp molho
+  if (!state.dispMolho) errors.push("Escolha a disposição do molho.");
+  // cliente
+  const nome = document.getElementById('clienteNome').value.trim();
+  const tel = document.getElementById('clienteTel').value.trim();
+  const endereco = document.getElementById('clienteEndereco').value.trim();
+  if (!nome) errors.push("Preencha o nome do cliente.");
+  if (!tel) errors.push("Preencha o telefone do cliente.");
+  if (state.entrega !== 'retirar' && !endereco) errors.push("Preencha o endereço para delivery.");
+  // pagamento
+  if (!state.pagamento) errors.push("Escolha a forma de pagamento.");
+  if (state.pagamento === 'dinheiro') {
+    const troco = state.trocoPara;
+    if (!troco || isNaN(troco) || troco <= 0) errors.push("Informe para quanto precisa de troco.");
+  }
+  return errors;
+}
+
+/* --- Montar mensagem --- */
+function buildMessage(){
+  const nome = document.getElementById('clienteNome').value.trim();
+  const tel = document.getElementById('clienteTel').value.trim();
+  const cep = document.getElementById('clienteCep').value.trim();
+  const endereco = document.getElementById('clienteEndereco').value.trim();
+  const obs = document.getElementById('obs').value.trim();
+
+  const lines = [];
+  lines.push("Pedido de Salada");
+  lines.push("");
+  lines.push(`Cliente: ${nome}`);
+  lines.push(`Telefone: ${tel}`);
+  if (cep) lines.push(`CEP: ${cep}`);
+  if (endereco) lines.push(`Endereço: ${endereco}`);
+  lines.push("");
+  lines.push(`Tamanho: ${state.size} (${state.size === 'P' ? 'R$16,00' : 'R$22,00'})`);
+  lines.push(`Proteína: ${state.proteina}`);
+  lines.push(`Complementos: ${Array.from(state.complementos).join(", ") || "-"}`);
+  lines.push(`Fruta: ${state.fruta}`);
+  lines.push(`Folhas: ${Array.from(state.folhas).join(", ")}`);
+  lines.push(`Carboidrato: ${state.carbo}`);
+  lines.push(`Molho: ${state.molho}`);
+  lines.push(`Disposição do molho: ${state.dispMolho}`);
+  lines.push("");
+  lines.push(`Entrega: ${state.entrega === 'retirar' ? 'Retirar no local' : (state.entrega === 'centro' ? 'Delivery - Centro (acréscimo R$4,00)' : 'Delivery - Outro (consultar valor)')}`);
+  lines.push(`Pagamento: ${state.pagamento}${state.pagamento === 'pix' ? ' (PIX — chave: ' + PIX + ')' : ''}`);
+  if (state.pagamento === 'dinheiro') lines.push(`Troco para: R$ ${state.trocoPara ? state.trocoPara.toFixed(2).replace(".", ",") : "-"}`);
+  lines.push("");
+  if (obs) {
+    lines.push("Observações:");
+    lines.push(obs);
+    lines.push("");
+  }
+  const total = calculateTotal();
+  if (state.entrega === 'outro') {
+    lines.push(`Total estimado: ${moneyBR(total)} + valor do delivery (consultar)`);
+  } else {
+    lines.push(`Total estimado: ${moneyBR(total)}`);
+  }
+  lines.push("");
+  lines.push(`Enviado em: ${new Date().toLocaleString('pt-BR')}`);
+  return lines.join("\n");
+}
+
+/* --- UI Atualizações --- */
+function refreshUI(){
+  // total
+  const total = calculateTotal();
+  document.getElementById('totalUI').textContent = (state.entrega === 'outro') ? (moneyBR(total) + " + delivery (consultar)") : moneyBR(total);
+
+  // troco display handled earlier
+
+  // show validation hints
+  const errBox = document.getElementById('ingError');
+  errBox.style.display = 'none';
+  errBox.textContent = '';
+
+  // highlight groups counts if exceeding
+  // Check complementos
+  if (state.complementos.size > limits.complementos) {
+    errBox.style.display = 'block';
+    errBox.textContent += `Máximo ${limits.complementos} complementos permitidos. `;
+  }
+  if (state.folhas.size !== limits.folhas) {
+    if (errBox.style.display === 'none') errBox.style.display = 'block';
+    errBox.textContent += `Escolha exatamente ${limits.folhas} folhas.`;
+  }
+}
+
+/* --- Botões preview e envio --- */
+document.getElementById('previewBtn').addEventListener('click', ()=>{
+  const errs = validateAll();
+  if (errs.length){
+    alert("Corrija antes de visualizar:\n\n" + errs.join("\n"));
+    return;
+  }
+  const msg = buildMessage();
+  alert("VISUALIZAÇÃO DO PEDIDO:\n\n" + msg);
+});
+
+function openWhatsAppWithMessage(text){
+  const encoded = encodeURIComponent(text);
+  const url = `https://wa.me/${WHATSAPP}?text=${encoded}`;
+  window.open(url, '_blank');
+}
+
+document.getElementById('sendBtn').addEventListener('click', ()=>{
+  const errs = validateAll();
+  if (errs.length){
+    alert("Não foi possível enviar. Corrija os seguintes itens:\n\n" + errs.join("\n"));
+    return;
+  }
+  const msg = buildMessage();
+  openWhatsAppWithMessage(msg);
+});
+document.getElementById('sendFooterBtn').addEventListener('click', ()=>{
+  const errs = validateAll();
+  if (errs.length){
+    alert("Não foi possível enviar. Corrija os seguintes itens:\n\n" + errs.join("\n"));
+    return;
+  }
+  const msg = buildMessage();
+  openWhatsAppWithMessage(msg);
+});
+
+/* initial UI */
+refreshUI();
+</script>
+</body>
+</html>

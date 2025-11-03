@@ -1,0 +1,881 @@
+import React, { useState } from 'react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+
+interface OrderState {
+  // Cliente
+  clienteNome: string;
+  clienteTel: string;
+  clienteCep: string;
+  clienteEndereco: string;
+  
+  // Produto  
+  productType: 'salada' | 'omelete' | 'sanduiche' | null;
+  size: 'P' | 'M' | null;
+  proteina: string | null;
+  complementos: Set<string>;
+  fruta: string | null;
+  folhas: Set<string>;
+  carbo: string | null;
+  molho: string | null;
+  dispMolho: string | null;
+  temperos: Set<string>;
+  
+  // Omelete
+  omeleteIngredientes: Set<string>;
+  omeleteAdicionais: number;
+  
+  // Observações
+  obs: string;
+  
+  // Entrega e pagamento
+  entrega: 'retirar' | 'centro' | 'outro';
+  pagamento: 'dinheiro' | 'cartao' | 'pix' | null;
+  trocoPara: number | null;
+}
+
+const WHATSAPP_NUMBER = "5522998476294";
+const PIX_KEY = "22998476294";
+
+const PRODUCT_TYPES = [
+  { value: 'salada', label: 'Salada Personalizada', description: 'Monte sua salada com ingredientes à escolha' },
+  { value: 'omelete', label: 'Omelete Personalizada', description: 'Monte sua omelete com até 4 ingredientes (R$18,00)' },
+  { value: 'sanduiche', label: 'Sanduíche Natural', description: 'Delicioso sanduíche natural (R$12,00)' }
+];
+
+const SIZES = [
+  { value: 'P', label: 'P (R$16,00)', price: 16 },
+  { value: 'M', label: 'M (R$22,00)', price: 22 }
+];
+
+const PROTEINS = [
+  { name: 'Frango desfiado', isNew: false },
+  { name: 'Ovo de codorna', isNew: false },
+  { name: 'Bacon', isNew: true },
+  { name: 'Queijo branco', isNew: true }
+];
+
+const COMPLEMENTS = [
+  { name: 'Cebola roxa', isNew: false },
+  { name: 'Cenoura ralada', isNew: false },
+  { name: 'Alho poró', isNew: false },
+  { name: 'Croutons (torradinha)', isNew: false },
+  { name: 'Tomate', isNew: false },
+  { name: 'Pepino', isNew: false },
+  { name: 'Batata palha', isNew: false },
+  { name: 'Repolho roxo', isNew: false },
+  { name: 'Azeitona', isNew: false },
+  { name: 'Milho verde', isNew: false },
+  { name: 'Ervilha', isNew: true },
+  { name: 'Brócolis', isNew: true },
+  { name: 'Palmito', isNew: true },
+  { name: 'Pimenta biquinho', isNew: true }
+];
+
+const FRUITS = [
+  'Manga',
+  'Uva passa',
+  'Abacaxi'
+];
+
+const LEAVES = [
+  'Alface crespa',
+  'Alface americana'
+];
+
+const CARBS = [
+  'Macarrão parafuso',
+  'Grão de bico'
+];
+
+const SAUCES = [
+  'Molho rose',
+  'Molho mostarda e mel',
+  'Molho iogurte natural com ervas finas',
+  'Molho Caesar'
+];
+
+const SEASONINGS = [
+  'Ervas finas',
+  'Alho frito',
+  'Gergelim',
+  'Orégano',
+  'Chimichurri'
+];
+
+const OMELETE_INGREDIENTS = [
+  'Mussarela',
+  'Milho',
+  'Ervilha',
+  'Palmito',
+  'Cebola roxa',
+  'Alho poró',
+  'Queijo branco',
+  'Frango',
+  'Azeitona verde'
+];
+
+const SANDUICHE_INGREDIENTS = [
+  'Frango desfiado',
+  'Maionese e creme de leite',
+  'Cenoura',
+  'Milho',
+  'Ervilha',
+  'Uva passa',
+  'Alface crespa'
+];
+
+const SAUCE_POSITIONS = [
+  'Separado',
+  'Na salada'
+];
+
+const DELIVERY_OPTIONS = [
+  { value: 'retirar', label: 'Retirar no local', price: 0 },
+  { value: 'centro', label: 'Delivery - Centro (soma R$4,00)', price: 4 },
+  { value: 'outro', label: 'Delivery - Outro (consultar valor)', price: 0 }
+];
+
+const PAYMENT_OPTIONS = [
+  { value: 'dinheiro', label: 'Dinheiro (precisa de troco)' },
+  { value: 'cartao', label: 'Cartão' },
+  { value: 'pix', label: `PIX (chave: ${PIX_KEY})` }
+];
+
+export default function SaladOrderSystem() {
+  const { toast } = useToast();
+  const [state, setState] = useState<OrderState>({
+    clienteNome: '',
+    clienteTel: '',
+    clienteCep: '',
+    clienteEndereco: '',
+    productType: null,
+    size: null,
+    proteina: null,
+    complementos: new Set(),
+    fruta: null,
+    folhas: new Set(),
+    carbo: null,
+    molho: null,
+    dispMolho: null,
+    temperos: new Set(),
+    omeleteIngredientes: new Set(),
+    omeleteAdicionais: 0,
+    obs: '',
+    entrega: 'retirar',
+    pagamento: null,
+    trocoPara: null
+  });
+
+  const calculateTotal = () => {
+    let total = 0;
+    
+    if (state.productType === 'salada') {
+      if (state.size === 'P') total += 16;
+      if (state.size === 'M') total += 22;
+    }
+    
+    if (state.productType === 'omelete') {
+      total += 18; // Base price
+      total += state.omeleteAdicionais * 2; // Additional ingredients
+    }
+    
+    if (state.productType === 'sanduiche') {
+      total += 12; // Sanduíche natural price
+    }
+    
+    if (state.entrega === 'centro') total += 4;
+    return total;
+  };
+
+  const validateOrder = () => {
+    const errors: string[] = [];
+    
+    if (!state.clienteNome.trim()) errors.push("Nome é obrigatório");
+    if (!state.clienteTel.trim()) errors.push("Telefone é obrigatório");
+    if (!state.clienteEndereco.trim()) errors.push("Endereço é obrigatório");
+    if (!state.productType) errors.push("Escolha o tipo de produto");
+    
+    if (state.productType === 'salada') {
+      if (!state.size) errors.push("Escolha o tamanho (P ou M)");
+      if (state.complementos.size > 6) errors.push("Máximo 6 complementos");
+      if (state.folhas.size > 2) errors.push("Máximo 2 folhas");
+      if (state.temperos.size > 3) errors.push("Máximo 3 temperos");
+      if (state.molho && !state.dispMolho) errors.push("Escolha disposição do molho");
+    }
+    
+    if (state.productType === 'omelete') {
+      if (state.omeleteIngredientes.size === 0) errors.push("Escolha pelo menos 1 ingrediente");
+      if (state.omeleteIngredientes.size > 4 + state.omeleteAdicionais) errors.push("Limite de ingredientes excedido");
+    }
+    
+    if (!state.pagamento) errors.push("Escolha forma de pagamento");
+    
+    return errors;
+  };
+
+  const formatOrderMessage = () => {
+    const total = calculateTotal();
+    const deliveryFee = state.entrega === 'centro' ? 4 : 0;
+    
+    let message = `🥗 *PEDIDO VIVA LEVE*\n\n`;
+    message += `👤 *Cliente:*\n`;
+    message += `Nome: ${state.clienteNome}\n`;
+    message += `Tel: ${state.clienteTel}\n`;
+    if (state.clienteCep) message += `CEP: ${state.clienteCep}\n`;
+    message += `Endereço: ${state.clienteEndereco}\n\n`;
+    
+    if (state.productType === 'salada') {
+      message += `🥗 *Salada:*\n`;
+      message += `Tamanho: ${state.size} (R$${state.size === 'P' ? '16,00' : '22,00'})\n`;
+      message += `Proteína: ${state.proteina}\n`;
+      message += `Complementos:\n${Array.from(state.complementos).map(c => `• ${c}`).join('\n')}\n`;
+      message += `Fruta: ${state.fruta}\n`;
+      message += `Folhas:\n${Array.from(state.folhas).map(f => `• ${f}`).join('\n')}\n`;
+      message += `Carboidrato: ${state.carbo}\n`;
+      message += `Molho: ${state.molho} (${state.dispMolho})\n`;
+      message += `Temperos:\n${Array.from(state.temperos).map(t => `• ${t}`).join('\n')}\n`;
+    }
+    
+    if (state.productType === 'omelete') {
+      message += `🍳 *Omelete:*\n`;
+      message += `Valor base: R$18,00\n`;
+      message += `Ingredientes (até 4 inclusos):\n${Array.from(state.omeleteIngredientes).map(i => `• ${i}`).join('\n')}\n`;
+      if (state.omeleteAdicionais > 0) {
+        message += `Ingredientes adicionais: ${state.omeleteAdicionais} x R$2,00 = R$${(state.omeleteAdicionais * 2).toFixed(2).replace('.', ',')}\n`;
+      }
+    }
+    
+    if (state.productType === 'sanduiche') {
+      message += `🥪 *Sanduíche Natural:*\n`;
+      message += `Valor: R$12,00\n`;
+      message += `Ingredientes:\n${SANDUICHE_INGREDIENTS.map(i => `• ${i}`).join('\n')}\n`;
+    }
+    
+    if (state.obs.trim()) {
+      message += `\n📝 *Observações:* ${state.obs}\n`;
+    }
+    
+    message += `\n🚚 *Entrega:* `;
+    if (state.entrega === 'retirar') message += 'Retirar no local';
+    else if (state.entrega === 'centro') message += 'Delivery Centro (+R$4,00)';
+    else message += 'Delivery outro local (consultar valor)';
+    
+    message += `\n💳 *Pagamento:* `;
+    if (state.pagamento === 'dinheiro') {
+      message += 'Dinheiro';
+      if (state.trocoPara) message += ` (troco para R$${state.trocoPara.toFixed(2).replace('.', ',')})`;
+    } else if (state.pagamento === 'cartao') {
+      message += 'Cartão';
+    } else if (state.pagamento === 'pix') {
+      message += `PIX (chave: ${PIX_KEY})`;
+    }
+    
+    message += `\n\n💰 *Total: R$${total.toFixed(2).replace('.', ',')}*`;
+    if (state.entrega === 'outro') {
+      message += ` + taxa delivery (a consultar)`;
+    }
+    
+    message += `\n\n⚠️ *IMPORTANTE:* Pedido será confirmado apenas após a confirmação do pagamento.`;
+    
+    return message;
+  };
+
+  const saveOrderToDatabase = async () => {
+    if (!supabase) return;
+
+    try {
+      const total = calculateTotal();
+      
+      // Preparar os detalhes do pedido
+      const orderDetails = {
+        productType: state.productType,
+        size: state.size,
+        proteina: state.proteina,
+        complementos: Array.from(state.complementos),
+        fruta: state.fruta,
+        folhas: Array.from(state.folhas),
+        carbo: state.carbo,
+        molho: state.molho,
+        dispMolho: state.dispMolho,
+        temperos: Array.from(state.temperos),
+        omeleteIngredientes: Array.from(state.omeleteIngredientes),
+        omeleteAdicionais: state.omeleteAdicionais,
+        obs: state.obs
+      };
+
+      // Salvar usando a função RPC do banco
+      const { data, error } = await supabase.rpc('create_order', {
+        p_customer_name: state.clienteNome,
+        p_customer_phone: state.clienteTel,
+        p_order_details: orderDetails,
+        p_total_value: total,
+        p_delivery_address: state.clienteEndereco + (state.clienteCep ? ` (CEP: ${state.clienteCep})` : ''),
+        p_delivery_method: state.entrega,
+        p_payment_method: state.pagamento || 'dinheiro'
+      });
+
+      if (error) {
+        console.error('Erro ao salvar pedido:', error);
+      } else {
+        console.log('Pedido salvo com sucesso:', data);
+      }
+    } catch (error) {
+      console.error('Erro ao salvar no banco:', error);
+    }
+  };
+
+  const sendToWhatsApp = async () => {
+    const errors = validateOrder();
+    if (errors.length > 0) {
+      toast({
+        title: "Erro no pedido",
+        description: errors.join(', '),
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Salvar no banco de dados se disponível
+    await saveOrderToDatabase();
+    
+    // Enviar para WhatsApp
+    const message = formatOrderMessage();
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
+    
+    window.open(whatsappUrl, '_blank');
+    
+    toast({
+      title: "Pedido enviado!",
+      description: "WhatsApp aberto com sua mensagem pronta",
+    });
+  };
+
+  const updateState = (updates: Partial<OrderState>) => {
+    setState(prev => ({ ...prev, ...updates }));
+  };
+
+  const toggleSingleSelection = (value: string, field: keyof OrderState) => {
+    setState(prev => ({
+      ...prev,
+      [field]: prev[field] === value ? null : value
+    }));
+  };
+
+  const toggleMultiSelection = (value: string, set: Set<string>, maxItems: number) => {
+    const newSet = new Set(set);
+    
+    if (newSet.has(value)) {
+      newSet.delete(value);
+    } else {
+      if (newSet.size >= maxItems) {
+        toast({
+          title: "Limite atingido",
+          description: `Você só pode escolher até ${maxItems} item(s) neste grupo.`,
+          variant: "destructive"
+        });
+        return newSet;
+      }
+      newSet.add(value);
+    }
+    
+    return newSet;
+  };
+
+  return (
+    <div className="app-container pb-20">
+      {/* Header */}
+      <header className="flex gap-3 items-center mb-6">
+        <div className="brand-icon">
+          VL
+        </div>
+        <div>
+          <h1 className="text-lg font-semibold m-0">Montar Salada — Viva Leve</h1>
+          <p className="text-sm text-muted-foreground m-0">
+            Preencha os dados, escolha opções e envie para o WhatsApp da cozinha.
+          </p>
+        </div>
+      </header>
+
+      {/* Dados do cliente */}
+      <Card className="p-4 mb-4">
+        <h3 className="font-semibold mb-4">Dados do cliente</h3>
+        
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="nome">Nome</Label>
+            <Input
+              id="nome"
+              placeholder="Nome completo"
+              value={state.clienteNome}
+              onChange={(e) => updateState({ clienteNome: e.target.value })}
+            />
+          </div>
+          
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Label htmlFor="tel">Telefone</Label>
+              <Input
+                id="tel"
+                type="tel"
+                placeholder="(22) 9xxxx-xxxx"
+                value={state.clienteTel}
+                onChange={(e) => updateState({ clienteTel: e.target.value })}
+              />
+            </div>
+            <div className="w-32">
+              <Label htmlFor="cep">CEP (opcional)</Label>
+              <Input
+                id="cep"
+                placeholder="XXXXX-XXX"
+                value={state.clienteCep}
+                onChange={(e) => updateState({ clienteCep: e.target.value })}
+              />
+            </div>
+          </div>
+          
+          <div>
+            <Label htmlFor="endereco">Endereço (rua, número, complemento, bairro)</Label>
+            <Textarea
+              id="endereco"
+              rows={2}
+              placeholder="Ex: Rua A, 123 - Centro"
+              value={state.clienteEndereco}
+              onChange={(e) => updateState({ clienteEndereco: e.target.value })}
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* Tipo de Produto */}
+      <Card className="p-4 mb-4">
+        <h3 className="font-semibold mb-2">Tipo de Produto</h3>
+        <p className="text-sm text-muted-foreground mb-3">Escolha o que deseja pedir</p>
+        
+        <div className="space-y-2">
+          {PRODUCT_TYPES.map((product) => (
+            <button
+              key={product.value}
+              className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                state.productType === product.value 
+                  ? 'border-primary bg-primary/10 text-primary' 
+                  : 'border-border hover:border-primary/50'
+              }`}
+              onClick={() => updateState({ 
+                productType: product.value as 'salada' | 'omelete' | 'sanduiche'
+              })}
+            >
+              <div className="font-medium">{product.label}</div>
+              <div className="text-sm text-muted-foreground">{product.description}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* Tamanho - só para salada */}
+      {state.productType === 'salada' && (
+        <Card className="p-4 mb-4">
+          <h3 className="font-semibold mb-2">Tamanho</h3>
+          <p className="text-sm text-muted-foreground mb-3">Escolha o tamanho da salada</p>
+          
+          <div className="flex flex-wrap gap-2">
+            {SIZES.map((size) => (
+              <button
+                key={size.value}
+                className={`option-button ${state.size === size.value ? 'selected' : ''}`}
+                onClick={() => toggleSingleSelection(size.value, 'size')}
+              >
+                {size.label}
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Omelete - só para omelete */}
+      {state.productType === 'omelete' && (
+        <Card className="p-4 mb-4">
+          <h3 className="font-semibold mb-4">Monte sua Omelete</h3>
+          
+          <div className="mb-4 p-3 bg-muted rounded-lg">
+            <p className="text-sm font-medium">Preço base: R$18,00 (até 4 ingredientes)</p>
+            <p className="text-sm text-muted-foreground">Ingredientes adicionais: R$2,00 cada</p>
+          </div>
+
+          <Label className="mb-2 block">Ingredientes (escolha até 4, adicione mais por R$2,00 cada)</Label>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {OMELETE_INGREDIENTS.map((ingredient) => {
+              const isSelected = state.omeleteIngredientes.has(ingredient);
+              const currentCount = state.omeleteIngredientes.size;
+              const maxBase = 4;
+              const maxWithExtras = maxBase + state.omeleteAdicionais;
+              const canAdd = currentCount < maxWithExtras;
+
+              return (
+                <button
+                  key={ingredient}
+                  className={`option-button ${isSelected ? 'selected' : ''}`}
+                  onClick={() => {
+                    const newIngredientes = new Set(state.omeleteIngredientes);
+                    
+                    if (newIngredientes.has(ingredient)) {
+                      newIngredientes.delete(ingredient);
+                      updateState({ omeleteIngredientes: newIngredientes });
+                    } else {
+                      if (canAdd) {
+                        newIngredientes.add(ingredient);
+                        updateState({ omeleteIngredientes: newIngredientes });
+                      } else {
+                        toast({
+                          title: "Limite atingido",
+                          description: "Adicione mais ingredientes extras ou remova algum ingrediente.",
+                          variant: "destructive"
+                        });
+                      }
+                    }
+                  }}
+                >
+                  {ingredient}
+                </button>
+              );
+            })}
+          </div>
+          
+          <div className="p-3 bg-muted rounded-lg">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium">Ingredientes selecionados: {state.omeleteIngredientes.size}</span>
+              <span className="text-sm text-muted-foreground">(4 inclusos no preço base)</span>
+            </div>
+            
+            <Label className="mb-2 block text-sm">Adicionar ingredientes extras (R$2,00 cada)</Label>
+            <div className="flex gap-2 items-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (state.omeleteAdicionais > 0) {
+                    const newAdicionais = state.omeleteAdicionais - 1;
+                    const maxAllowed = 4 + newAdicionais;
+                    if (state.omeleteIngredientes.size > maxAllowed) {
+                      toast({
+                        title: "Remova ingredientes",
+                        description: `Você tem ${state.omeleteIngredientes.size} ingredientes. Remova ${state.omeleteIngredientes.size - maxAllowed} antes de diminuir os extras.`,
+                        variant: "destructive"
+                      });
+                    } else {
+                      updateState({ omeleteAdicionais: newAdicionais });
+                    }
+                  }
+                }}
+                disabled={state.omeleteAdicionais === 0}
+              >
+                -
+              </Button>
+              <span className="text-lg font-semibold w-12 text-center">{state.omeleteAdicionais}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  updateState({ omeleteAdicionais: state.omeleteAdicionais + 1 });
+                }}
+              >
+                +
+              </Button>
+              <span className="text-sm text-muted-foreground ml-2">
+                = R${(state.omeleteAdicionais * 2).toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Sanduíche Natural */}
+      {state.productType === 'sanduiche' && (
+        <Card className="p-4 mb-4">
+          <h3 className="font-semibold mb-4">Sanduíche Natural</h3>
+          
+          <div className="mb-4 p-3 bg-muted rounded-lg">
+            <p className="text-sm font-medium">Preço: R$12,00</p>
+          </div>
+
+          <Label className="mb-2 block">Ingredientes inclusos:</Label>
+          <div className="flex flex-wrap gap-2">
+            {SANDUICHE_INGREDIENTS.map((ingredient) => (
+              <div
+                key={ingredient}
+                className="px-3 py-2 rounded-lg border border-primary bg-primary/10 text-primary text-sm"
+              >
+                {ingredient}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Ingredientes - só para salada */}
+      {state.productType === 'salada' && (
+      <Card className="p-4 mb-4">
+        <h3 className="font-semibold mb-4">Ingredientes</h3>
+        
+        {/* Proteína */}
+        <div className="mb-6">
+          <Label className="mb-2 block">Proteína (escolha 1)</Label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {PROTEINS.map((protein) => (
+              <button
+                key={protein.name}
+                className={`option-button ${state.proteina === protein.name ? 'selected' : ''} ${protein.isNew ? 'bg-green-50 border-green-300 dark:bg-green-950 dark:border-green-800' : ''}`}
+                onClick={() => toggleSingleSelection(protein.name, 'proteina')}
+              >
+                {protein.name}
+                {protein.isNew && <span className="ml-1 text-[10px] text-green-600 dark:text-green-400 font-semibold">NOVO</span>}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Selecione apenas 1 proteína.</p>
+        </div>
+
+        {/* Complementos */}
+        <div className="mb-6">
+          <Label className="mb-2 block">Complementos (até 6)</Label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {COMPLEMENTS.map((complement) => (
+              <button
+                key={complement.name}
+                className={`option-button ${state.complementos.has(complement.name) ? 'selected' : ''} ${complement.isNew ? 'bg-green-50 border-green-300 dark:bg-green-950 dark:border-green-800' : ''}`}
+                onClick={() => {
+                  const newComplementos = toggleMultiSelection(complement.name, state.complementos, 6);
+                  updateState({ complementos: newComplementos });
+                }}
+              >
+                {complement.name}
+                {complement.isNew && <span className="ml-1 text-[10px] text-green-600 dark:text-green-400 font-semibold">NOVO</span>}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Máximo 6 complementos diferentes.</p>
+        </div>
+
+        {/* Frutas */}
+        <div className="mb-6">
+          <Label className="mb-2 block">Frutas (escolha 1)</Label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {FRUITS.map((fruit) => (
+              <button
+                key={fruit}
+                className={`option-button ${state.fruta === fruit ? 'selected' : ''}`}
+                onClick={() => toggleSingleSelection(fruit, 'fruta')}
+              >
+                {fruit}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Selecione apenas 1 fruta.</p>
+        </div>
+
+        {/* Folhas */}
+        <div className="mb-6">
+          <Label className="mb-2 block">Folhas (escolha 2)</Label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {LEAVES.map((leaf) => (
+              <button
+                key={leaf}
+                className={`option-button ${state.folhas.has(leaf) ? 'selected' : ''}`}
+                onClick={() => {
+                  const newFolhas = toggleMultiSelection(leaf, state.folhas, 2);
+                  updateState({ folhas: newFolhas });
+                }}
+              >
+                {leaf}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Escolha exatamente 2 folhas.</p>
+        </div>
+
+        {/* Carboidrato */}
+        <div className="mb-6">
+          <Label className="mb-2 block">Carboidrato (escolha 1)</Label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {CARBS.map((carb) => (
+              <button
+                key={carb}
+                className={`option-button ${state.carbo === carb ? 'selected' : ''}`}
+                onClick={() => toggleSingleSelection(carb, 'carbo')}
+              >
+                {carb}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Selecione 1 carboidrato.</p>
+        </div>
+
+        {/* Molho */}
+        <div className="mb-6">
+          <Label className="mb-2 block">Molho (escolha 1)</Label>
+          <div className="flex flex-wrap gap-2">
+            {SAUCES.map((sauce) => (
+              <button
+                key={sauce}
+                className={`option-button ${state.molho === sauce ? 'selected' : ''}`}
+                onClick={() => toggleSingleSelection(sauce, 'molho')}
+              >
+                {sauce}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Disposição do molho */}
+        <div className="mb-6">
+          <Label className="mb-2 block">Disposição do molho</Label>
+          <div className="flex flex-wrap gap-2">
+            {SAUCE_POSITIONS.map((position) => (
+              <button
+                key={position}
+                className={`option-button ${state.dispMolho === position ? 'selected' : ''}`}
+                onClick={() => toggleSingleSelection(position, 'dispMolho')}
+              >
+                {position}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Temperos */}
+        <div>
+          <Label className="mb-2 block">Temperos (até 3)</Label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {SEASONINGS.map((seasoning) => (
+              <button
+                key={seasoning}
+                className={`option-button ${state.temperos.has(seasoning) ? 'selected' : ''}`}
+                onClick={() => {
+                  const newTemperos = toggleMultiSelection(seasoning, state.temperos, 3);
+                  updateState({ temperos: newTemperos });
+                }}
+              >
+                {seasoning}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Escolha de 1 até 3 temperos.</p>
+        </div>
+      </Card>
+      )}
+
+      {/* Observações */}
+      <Card className="p-4 mb-4">
+        <Label htmlFor="obs">Observações</Label>
+        <Textarea
+          id="obs"
+          rows={3}
+          placeholder="Ex: Sem cebola, sem sal."
+          value={state.obs}
+          onChange={(e) => updateState({ obs: e.target.value })}
+        />
+      </Card>
+
+      {/* Entrega e Pagamento */}
+      <Card className="p-4 mb-4">
+        <h3 className="font-semibold mb-4">Entrega</h3>
+        
+        <div className="flex flex-wrap gap-2 mb-4">
+          {DELIVERY_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              className={`option-button ${state.entrega === option.value ? 'selected' : ''}`}
+              onClick={() => updateState({ entrega: option.value as any })}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        
+        {state.entrega === 'outro' && (
+          <p className="text-xs text-muted-foreground mb-4">
+            Se escolher "Outro", a cozinha receberá o endereço e terá que confirmar o valor do delivery.
+          </p>
+        )}
+
+        <h4 className="font-semibold mb-3 mt-4">Forma de pagamento</h4>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {PAYMENT_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              className={`option-button ${state.pagamento === option.value ? 'selected' : ''}`}
+              onClick={() => updateState({ pagamento: option.value as any })}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {state.pagamento === 'dinheiro' && (
+          <div className="mb-4">
+            <Label htmlFor="troco">Troco para (R$)</Label>
+            <Input
+              id="troco"
+              type="text"
+              placeholder="Ex: 50,00"
+              onChange={(e) => {
+                const value = e.target.value.replace(',', '.').replace(/[^0-9.]/g, '');
+                updateState({ trocoPara: value ? parseFloat(value) : null });
+              }}
+            />
+          </div>
+        )}
+
+        <div className="flex justify-between items-center mt-4 pt-4 border-t">
+          <span className="text-sm text-muted-foreground">Total estimado</span>
+          <span className="text-xl font-bold">
+            R${calculateTotal().toFixed(2).replace('.', ',')}
+            {state.entrega === 'outro' && <span className="text-sm font-normal"> + taxa delivery</span>}
+          </span>
+        </div>
+      </Card>
+
+      {/* Ações */}
+      <Card className="p-4 mb-4">
+        <div className="flex gap-2 flex-wrap">
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              const message = formatOrderMessage();
+              navigator.clipboard?.writeText(message);
+              toast({
+                title: "Pedido copiado!",
+                description: "Mensagem copiada para área de transferência",
+              });
+            }}
+          >
+            Visualizar pedido
+          </Button>
+          <Button onClick={sendToWhatsApp} className="flex-1">
+            Enviar para WhatsApp
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          Ao enviar, o WhatsApp abrirá com a mensagem pronta para o número da cozinha.
+        </p>
+      </Card>
+
+      {/* Footer fixo */}
+      <div className="glass-footer">
+        <div className="w-full max-w-4xl">
+          <Button onClick={sendToWhatsApp} className="w-full" size="lg">
+            Enviar pedido → WhatsApp
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
